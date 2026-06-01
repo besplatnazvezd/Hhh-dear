@@ -33,9 +33,9 @@ module.exports = async (req, res) => {
     }
 
     try {
-        // Округляем рубли до 2 знаков
+        // Округляем до 2 знаков
         const cryptoAmount = parseFloat(amount).toFixed(2);
-        console.log(`Отправка запроса в CryptoBot API. Сумма в рублях: ${cryptoAmount}`);
+        console.log(`Отправка запроса в CryptoBot API. Сумма: ${cryptoAmount} RUB`);
 
         const response = await fetch('https://pay.crypt.bot/api/createInvoice', {
             method: 'POST',
@@ -44,9 +44,9 @@ module.exports = async (req, res) => {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                fiat: 'RUB',   // Валюта ценника (Рубли)
-                accepted_assets: 'USDT', // В какой крипте принимать оплату (USDT)
-                amount: cryptoAmount.toString(), // Сумма в рублях (например, 29.00 или 299.00)
+                fiat: 'RUB',   // Выставляем счет в Рублях
+                accepted_assets: 'USDT', // Клиент платит в USDT
+                amount: cryptoAmount.toString(),
                 description: description || "Оплата в BOSS STORE",
                 allow_comments: false,
                 allow_anonymous: false
@@ -59,7 +59,10 @@ module.exports = async (req, res) => {
         if (data.ok) {
             return res.status(200).json({ pay_url: data.result.pay_url });
         } else {
-            return res.status(400).json({ error: `CryptoBot API: ${data.description}` });
+            // У КРИПТОБОТА ОШИБКА ЛЕЖИТ В data.error.name ИЛИ data.error.code
+            const errName = data.error ? (data.error.name || data.error.code) : "UNKNOWN_ERROR";
+            console.error("CryptoBot вернул ошибку API:", errName);
+            return res.status(400).json({ error: `CryptoBot API: ${errName}` });
         }
 
     } catch (error) {
