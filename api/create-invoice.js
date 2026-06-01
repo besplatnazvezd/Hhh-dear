@@ -55,8 +55,8 @@ module.exports = async (req, res) => {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                asset: 'USDT', // Будем выставлять счета в долларах (USDT)
-                fiat:  'RUB',
+                   fiat:  'RUB', // Будем выставлять счета в долларах (USDT)
+                accepted_assets: 'USDT',
                 amount: cryptoAmount.toString(),
                 description: description || "Оплата в BOSS STORE",
                 allow_comments: false,
