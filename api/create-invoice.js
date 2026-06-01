@@ -33,10 +33,36 @@ module.exports = async (req, res) => {
     }
 
     try {
-        // Округляем до 2 знаков
-        const cryptoAmount = parseFloat(amount).toFixed(2);
-        console.log(`Отправка запроса в CryptoBot API. Сумма: ${cryptoAmount} RUB`);
+        const rubAmount = parseFloat(amount);
+        console.log(`Исходная сумма в рублях: ${rubAmount} RUB`);
 
+        // 1. ПОЛУЧАЕМ АКТУАЛЬНЫЙ КУРС ОБМЕНА ОТ CRYPTOBOT
+        let usdtToRubRate = 94.0; // Резервный курс на случай сбоя API
+        try {
+            const ratesResponse = await fetch('https://pay.crypt.bot/api/getExchangeRates', {
+                headers: { 'Crypto-Pay-API-Token': cryptoPayToken }
+            });
+            const ratesData = await ratesResponse.json();
+            
+            if (ratesData.ok && ratesData.result) {
+                // Ищем курс USDT к RUB
+                const pair = ratesData.result.find(r => r.source === 'USDT' && r.target === 'RUB' && r.is_valid);
+                if (pair) {
+                    usdtToRubRate = parseFloat(pair.rate);
+                    console.log(`Текущий официальный курс USDT/RUB: ${usdtToRubRate}`);
+                }
+            }
+        } catch (rateErr) {
+            console.error("Не удалось получить курс обмена, используем резервный:", rateErr);
+        }
+
+        // 2. КОНВЕРТИРУЕМ РУБЛИ В USDT
+        // Добавим +1% к резервному курсу для защиты от резких колебаний (стандартная практика)
+        const finalRate = usdtToRubRate;
+        const usdtAmount = (rubAmount / finalRate).toFixed(4); // 4 знака после запятой для точности
+        console.log(`Итоговая сумма к оплате: ${usdtAmount} USDT`);
+
+        // 3. СОЗДАЕМ ОБЫЧНЫЙ СЧЕТ В USDT
         const response = await fetch('https://pay.crypt.bot/api/createInvoice', {
             method: 'POST',
             headers: {
@@ -44,10 +70,9 @@ module.exports = async (req, res) => {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                fiat: 'RUB',   // Выставляем счет в Рублях
-                accepted_assets: 'USDT', // Клиент платит в USDT
-                amount: cryptoAmount.toString(),
-                description: description || "Оплата в BOSS STORE",
+                asset: 'USDT', // Оплата в стабильном долларе (USDT)
+                amount: usdtAmount.toString(),
+                description: `${description || "Оплата заказа"} | Курс: 1$ ~ ${finalRate.toFixed(2)}₽`,
                 allow_comments: false,
                 allow_anonymous: false
             })
@@ -59,9 +84,7 @@ module.exports = async (req, res) => {
         if (data.ok) {
             return res.status(200).json({ pay_url: data.result.pay_url });
         } else {
-            // У КРИПТОБОТА ОШИБКА ЛЕЖИТ В data.error.name ИЛИ data.error.code
             const errName = data.error ? (data.error.name || data.error.code) : "UNKNOWN_ERROR";
-            console.error("CryptoBot вернул ошибку API:", errName);
             return res.status(400).json({ error: `CryptoBot API: ${errName}` });
         }
 
